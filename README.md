@@ -162,3 +162,17 @@ java -jar target\reservation-0.0.1-SNAPSHOT.jar
 
 
 Границы входных дат: UTC годы 0001–9999; даты в JSON — ISO-строки, не epoch-числа. Нулевой символ U+0000 в текстовых полях запрещен.
+
+## Веб-интерфейс
+
+Исходники React + TypeScript находятся в [frontend](frontend/README.md).
+Запустите backend по инструкции выше, затем в отдельном терминале:
+
+~~~powershell
+cd frontend
+npm.cmd ci
+npm.cmd run dev
+~~~
+
+Откройте http://127.0.0.1:5173. Нужен Node.js 24 LTS.
+Остановка frontend: Ctrl+C. Настройка пароля БД требуется только backend.
