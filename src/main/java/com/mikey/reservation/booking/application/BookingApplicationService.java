@@ -24,10 +24,16 @@ public class BookingApplicationService {
             return response;
         } catch (RuntimeException failure) { throw translator.translate(failure); }
     }
-    public BookingResponse cancel(UUID id) {
-        var result = transactions.cancel(id);
+    public BookingResponse create(UUID resourceId, TimeInterval interval, boolean hold, String key) {
+        try { return transactions.create(resourceId, interval, hold, key); }
+        catch(RuntimeException failure) { throw translator.translate(failure); }
+    }
+    public BookingResponse cancel(UUID id, String reason) {
+        var result = transactions.cancel(id, reason);
         if (result.changed()) log.info("booking_cancelled bookingId={} resourceId={}", id, result.booking().resourceId());
         return result.booking();
     }
 }
+
+
 

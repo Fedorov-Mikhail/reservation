@@ -16,6 +16,8 @@ public class Resource {
     @Column(length = 255) private String location;
     @Column(nullable = false, updatable = false) private Instant createdAt;
     @Column(nullable = false) private Instant updatedAt;
+    @Column(nullable = false, updatable = false) private UUID createdBy = UUID.fromString("00000000-0000-0000-0000-000000000001");
+    public void assignOwner(UUID owner) { this.createdBy = owner; }
 
     public Resource(String name, String description, String location, Instant now) {
         id = UUID.randomUUID();
@@ -29,4 +31,5 @@ public class Resource {
         this.updatedAt = now;
     }
 }
+
 

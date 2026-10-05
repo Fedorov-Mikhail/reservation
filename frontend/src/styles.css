@@ -5,3 +5,6 @@
 @media(max-width:620px){.header{height:72px;padding:0 18px}.local-tag{display:none}main{padding:25px 14px 0}.layout{grid-template-columns:1fr}.welcome{min-height:250px}.detail{min-height:350px}.time-inputs{grid-template-columns:1fr}.bookings li{align-items:flex-start;flex-direction:column}.intro>p:last-child{font-size:14px}.resource-list{max-height:300px;overflow:auto}}
 
 
+.auth-screen{max-width:540px;margin:60px auto}.auth-screen form{margin-top:24px}.auth-toggle{margin-top:20px}.admin-users{margin-top:24px}.admin-users summary{cursor:pointer;font-weight:600}.admin-users small{display:block;font-size:10px}select{font:inherit;padding:8px;border:1px solid #ccd5cf;border-radius:8px}
+.schedule-settings{display:grid;gap:14px;margin-top:18px}.schedule-settings summary{cursor:pointer}
+.activity{margin-top:24px}.activity details{padding:12px 0}.activity summary{cursor:pointer;font-weight:600}.activity small{font-size:10px}

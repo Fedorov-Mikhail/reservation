@@ -1,5 +1,5 @@
 export interface Resource { id: string; name: string; description?: string; location?: string }
-export interface Booking { id: string; startsAt: string; endsAt: string; status: 'CONFIRMED' | 'CANCELLED' }
+export interface Booking { id: string; startsAt: string; endsAt: string; status: 'CONFIRMED' | 'CANCELLED' | 'HELD' | 'EXPIRED'; expiresAt?:string; createdBy?:string }
 export interface Page<T> { items: T[]; totalElements: number; page: number; size: number }
 export interface Interval { startsAt: string; endsAt: string }
 export class ApiError extends Error {
@@ -8,9 +8,15 @@ export class ApiError extends Error {
 export async function api<T>(path: string, method = 'GET', body?: unknown, signal?: AbortSignal): Promise<T> {
   let response: Response;
   try {
+    let token: string | undefined;
+    if (method !== 'GET') {
+      const csrf = await fetch('/api/v1/auth/csrf', {signal});
+      if (!csrf.ok) throw new Error('CSRF request failed');
+      token = (await csrf.json()).token;
+    }
     response = await fetch('/api/v1' + path, {
-      method, signal, headers: body ? { 'Content-Type': 'application/json' } : undefined,
-      body: body ? JSON.stringify(body) : undefined,
+      method, signal, headers: { ...(body ? { 'Content-Type': body instanceof URLSearchParams ? 'application/x-www-form-urlencoded' : 'application/json' } : {}), ...(token ? {'X-CSRF-TOKEN':token}: {}) },
+      body: body ? (body instanceof URLSearchParams ? body.toString() : JSON.stringify(body)) : undefined,
     });
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') throw error;
@@ -19,6 +25,15 @@ export async function api<T>(path: string, method = 'GET', body?: unknown, signa
   if (!response.ok) {
     const problem = await response.json().catch(() => ({}));
     const messages: Record<string, string> = {
+      UNAUTHENTICATED: 'Войдите в аккаунт. Если сессия истекла, обновите страницу.',
+      INVALID_CREDENTIALS: 'Неверный логин или пароль.',
+      FORBIDDEN: 'Недостаточно прав или устарела сессия. Обновите страницу.',
+      USERNAME_TAKEN: 'Этот логин уже занят.',
+      LAST_ADMIN: 'Нельзя отключить последнего администратора.',
+      SCHEDULE_CONFLICT: 'Расписание нарушает существующие брони. Сначала отмените или завершите их.',
+      OUTSIDE_SCHEDULE: 'Интервал выходит за рабочее время ресурса.',
+      HOLD_EXPIRED: 'Удержание истекло или больше не может быть подтверждено.',
+      IDEMPOTENCY_CONFLICT: 'Этот ключ запроса уже использован для другой операции.',
       BOOKING_OVERLAP: 'Это время уже занято. Выберите другой интервал.',
       BOOKING_CANNOT_BE_CANCELLED: 'Начавшуюся бронь отменить нельзя.',
       RESOURCE_NOT_FOUND: 'Ресурс не найден. Обновите список ресурсов.',
@@ -56,5 +71,7 @@ export function bookingBody(start: string, end: string) {
 export function displayTime(value: string) {
   return new Intl.DateTimeFormat('ru-RU', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }).format(new Date(value));
 }
+
+
 
 

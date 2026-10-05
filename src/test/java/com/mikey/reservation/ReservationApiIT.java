@@ -21,7 +21,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import static org.assertj.core.api.Assertions.assertThat;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {"app.bootstrap.username=integration-admin", "app.bootstrap.password=Integration-admin-123"})
 @Import(ReservationApiIT.FixedTime.class)
 class ReservationApiIT extends PostgresSupport {
     @Value("${local.server.port}") int port;
@@ -35,11 +35,16 @@ class ReservationApiIT extends PostgresSupport {
         }
     }
 
+    private com.mikey.reservation.support.SessionClient session;
+    private synchronized com.mikey.reservation.support.SessionClient session() throws Exception {
+        if (session == null) {
+            session = new com.mikey.reservation.support.SessionClient(port);
+            assertThat(session.login("integration-admin", "Integration-admin-123").statusCode()).isEqualTo(200);
+        }
+        return session;
+    }
     HttpResponse<String> call(String method, String path, String body) throws Exception {
-        var builder = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + path))
-                .timeout(Duration.ofSeconds(20)).header("Content-Type", "application/json");
-        return client.send(builder.method(method, body == null ? HttpRequest.BodyPublishers.noBody()
-                : HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());
+        return session().call(method, path, body);
     }
 
     String resource() throws Exception {
@@ -295,7 +300,7 @@ class ReservationApiIT extends PostgresSupport {
         var id = java.util.UUID.randomUUID();
         jdbc.update("insert into bookings(id,resource_id,starts_at,ends_at,status,created_at) values (?,?,?::timestamptz,?::timestamptz,'CONFIRMED',now())",
                 id, java.util.UUID.fromString(resource), "2029-12-31T23:00:00Z", "2030-01-01T01:00:00Z");
-        error(call("POST", "/api/v1/bookings/" + id + "/cancel", null), 409, "BOOKING_CANNOT_BE_CANCELLED");
+        error(call("POST", "/api/v1/bookings/" + id + "/cancel", "{\"reason\":\"Integration test\"}"), 409, "BOOKING_CANNOT_BE_CANCELLED");
         assertThat(confirmed(resource)).isEqualTo(1);
     }
 
@@ -373,3 +378,4 @@ class ReservationApiIT extends PostgresSupport {
     }
 
 }
+

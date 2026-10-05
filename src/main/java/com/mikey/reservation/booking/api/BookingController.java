@@ -19,12 +19,19 @@ public class BookingController {
         this.service = service; this.queries = queries;
     }
     @PostMapping("/resources/{resourceId}/bookings")
-    public ResponseEntity<BookingResponse> create(@PathVariable UUID resourceId, @Valid @RequestBody CreateBookingRequest body) {
-        var result = service.create(resourceId, body.interval());
+    public ResponseEntity<BookingResponse> create(@PathVariable UUID resourceId, @Valid @RequestBody CreateBookingRequest body, @RequestHeader(value="Idempotency-Key", required=false) String key) {
+        var result = service.create(resourceId, body.interval(), false, key);
         return ResponseEntity.created(URI.create("/api/v1/bookings/" + result.id())).body(result);
     }
+    @PostMapping("/resources/{resourceId}/holds") public ResponseEntity<BookingResponse> hold(@PathVariable UUID resourceId, @Valid @RequestBody CreateBookingRequest body, @RequestHeader(value="Idempotency-Key", required=false) String key) {
+        var result = service.create(resourceId, body.interval(), true, key);
+        return ResponseEntity.created(URI.create("/api/v1/bookings/" + result.id())).body(result);
+    }
+    @PostMapping("/bookings/{id}/confirm") public BookingResponse confirm(@PathVariable UUID id) {return queries.confirm(id);}
     @GetMapping("/bookings/{id}") public BookingResponse get(@PathVariable UUID id) { return queries.get(id); }
-    @PostMapping("/bookings/{id}/cancel") public BookingResponse cancel(@PathVariable UUID id) { return service.cancel(id); }
+    @PostMapping("/bookings/{id}/cancel") public BookingResponse cancel(@PathVariable UUID id, @RequestBody(required = false) CancellationRequest body) { return service.cancel(id, body == null ? null : body.reason()); }
+    public record CancellationRequest(String reason) {}
+    @GetMapping("/me/bookings") public PageResponse<BookingResponse> mine(@RequestParam(defaultValue="0") int page, @RequestParam(defaultValue="20") int size) { return queries.mine(page, size); }
 
     @GetMapping("/resources/{resourceId}/bookings")
     public PageResponse<BookingResponse> list(@PathVariable UUID resourceId,
@@ -35,4 +42,6 @@ public class BookingController {
         return queries.list(resourceId, status, from == null ? null : from.toInstant(), to == null ? null : to.toInstant(), page, size);
     }
 }
+
+
 
