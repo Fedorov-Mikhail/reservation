@@ -1,9 +1,9 @@
 import {useEffect,useState} from 'react';
 import {api,displayTime,errorText} from './api';
 interface Entry{id:string;resourceName:string;startsAt:string;endsAt:string;status:string;offeredBookingId?:string}
-interface Notice{id:string;bookingId:string;status:string;createdAt:string;readAt?:string}
+interface Notice{id:string;bookingId:string;status:string;createdAt:string;readAt?:string;resourceName?:string;startsAt?:string;endsAt?:string}
 const statuses:Record<string,string>={WAITING:'Ожидание',OFFERED:'Предложено время',FULFILLED:'Подтверждено',CANCELLED:'Отменено',EXPIRED:'Истекло',HELD:'Время удержано',CONFIRMED:'Бронь подтверждена'};
-export default function ActivityPanel(){
+export default function ActivityPanel({onBooking}:{onBooking?:(id:string)=>void}={}){
  const [loading,setLoading]=useState(true);
  const [entries,setEntries]=useState<Entry[]>([]),[notices,setNotices]=useState<Notice[]>([]),[error,setError]=useState(''),[busy,setBusy]=useState(false),[revision,setRevision]=useState(0),[queuePage,setQueuePage]=useState(0),[noticePage,setNoticePage]=useState(0);
  useEffect(()=>{const refresh=()=>setRevision(n=>n+1);const timer=setInterval(refresh,15000);window.addEventListener('reservation:changed',refresh);return()=>{clearInterval(timer);window.removeEventListener('reservation:changed',refresh);};},[]);
@@ -13,7 +13,7 @@ export default function ActivityPanel(){
  <div aria-busy={loading}>{loading&&<p role="status">Обновление заявок и уведомлений…</p>}<details open><summary>Лист ожидания</summary><ul className="bookings">{entries.map(entry=><li key={entry.id}><div><strong>{entry.resourceName}</strong><p>{displayTime(entry.startsAt)} — {displayTime(entry.endsAt)}</p><span className="badge">{statuses[entry.status]}</span></div>
  <div className="actions">{entry.status==='OFFERED'&&<button disabled={busy} onClick={()=>act('/bookings/'+entry.offeredBookingId+'/confirm')}>Принять предложение</button>}{['WAITING','OFFERED'].includes(entry.status)&&<button disabled={busy} onClick={()=>act('/waitlist/'+entry.id+'/cancel')}>Отменить заявку</button>}</div></li>)}</ul>{!loading&&!error&&entries.length===0&&<p className="empty">Заявок пока нет.</p>}
  <div className="pager"><button disabled={!queuePage} onClick={()=>setQueuePage(n=>n-1)}>Назад</button><span>{queuePage+1}</span><button disabled={entries.length<20} onClick={()=>setQueuePage(n=>n+1)}>Далее</button></div></details>
- <details><summary>Уведомления</summary><ul className="bookings">{notices.map(notice=><li key={notice.id}><div><strong>{statuses[notice.status]??notice.status}</strong><p className="muted">{displayTime(notice.createdAt)}</p><small>Бронь {notice.bookingId.slice(0,8)}</small></div>{!notice.readAt&&<button disabled={busy} onClick={()=>act('/me/notifications/'+notice.id+'/read')}>Прочитано</button>}</li>)}</ul>{!loading&&!error&&notices.length===0&&<p className="empty">Уведомлений пока нет.</p>}
+ <details><summary>Уведомления</summary><ul className="bookings">{notices.map(notice=><li key={notice.id}><div><strong>{statuses[notice.status]??notice.status}</strong><p className="muted">{displayTime(notice.createdAt)}</p>{notice.resourceName&&<p>{notice.resourceName}</p>}{notice.startsAt&&notice.endsAt&&<p>{displayTime(notice.startsAt)} — {displayTime(notice.endsAt)}</p>}<button onClick={()=>onBooking?.(notice.bookingId)}>Открыть бронь {notice.bookingId.slice(0,8)}</button></div>{!notice.readAt&&<button disabled={busy} onClick={()=>act('/me/notifications/'+notice.id+'/read')}>Прочитано</button>}</li>)}</ul>{!loading&&!error&&notices.length===0&&<p className="empty">Уведомлений пока нет.</p>}
  <div className="pager"><button disabled={!noticePage} onClick={()=>setNoticePage(n=>n-1)}>Назад</button><span>{noticePage+1}</span><button disabled={notices.length<20} onClick={()=>setNoticePage(n=>n+1)}>Далее</button></div></details></div></section>;
 }
 

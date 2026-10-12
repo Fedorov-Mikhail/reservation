@@ -14,9 +14,12 @@ public class CurrentUser {
  public Account current() {
    var auth=SecurityContextHolder.getContext().getAuthentication();
    if(auth==null || !auth.isAuthenticated() || auth.getName().equals("anonymousUser")) throw unauthorized();
-   return jdbc.query("select id,username,role,enabled from app_users where username=? and enabled",
+   var account = jdbc.query("select id,username,role,enabled from app_users where username=? and enabled",
      (rs,n)->new Account(rs.getObject("id",UUID.class),rs.getString("username"),rs.getString("role"),rs.getBoolean("enabled")),
      auth.getName()).stream().findFirst().orElseThrow(CurrentUser::unauthorized);
+   if(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive() && !org.springframework.transaction.support.TransactionSynchronizationManager.isCurrentTransactionReadOnly())
+     jdbc.queryForObject("select set_config('reservation.actor_id',?,true)",String.class,account.id().toString());
+   return account;
  }
  public UUID requiredId(){return current().id();}
  public boolean isAdmin(){return current().role().equals("ADMIN");}

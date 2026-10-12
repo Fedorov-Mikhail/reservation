@@ -22,10 +22,14 @@ public class SecurityConfiguration {
    response.setStatus(status);response.setContentType("application/problem+json");
    response.getWriter().write("{\"status\":"+status+",\"code\":\""+code+"\"}");
  }
- @Bean SecurityFilterChain apiSecurity(HttpSecurity http)throws Exception {
+ @Bean SecurityFilterChain apiSecurity(HttpSecurity http, com.mikey.reservation.identity.CurrentUser current)throws Exception {
    return http.csrf(csrf->csrf.csrfTokenRepository(new HttpSessionCsrfTokenRepository())
        .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()))
-     .authorizeHttpRequests(auth->auth.requestMatchers("/api/v1/auth/csrf","/api/v1/auth/login","/api/v1/auth/register","/actuator/health","/error").permitAll()
+     .authorizeHttpRequests(auth->auth.requestMatchers("/api/v1/auth/csrf","/api/v1/auth/login","/api/v1/auth/register","/actuator/health","/actuator/health/**","/error").permitAll()
+       .requestMatchers("/actuator/metrics", "/actuator/metrics/**").access((authentication,context)->{
+         try{return new org.springframework.security.authorization.AuthorizationDecision(current.isAdmin());}
+         catch(com.mikey.reservation.shared.api.ApiException e){return new org.springframework.security.authorization.AuthorizationDecision(false);}
+       })
        .requestMatchers("/api/v1/**").authenticated().anyRequest().denyAll())
      .requestCache(cache->cache.disable())
      .exceptionHandling(errors->errors.authenticationEntryPoint((req,res,e)->problem(res,401,"UNAUTHENTICATED"))
@@ -38,4 +42,3 @@ public class SecurityConfiguration {
      .build();
  }
 }
-

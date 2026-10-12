@@ -1,0 +1,77 @@
+name: reservation-ci
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: reservation
+          POSTGRES_USER: reservation_app
+          POSTGRES_PASSWORD: ci_database_password
+        ports: ['5432:5432']
+        options: --health-cmd="pg_isready -U reservation_app -d reservation" --health-interval=5s --health-timeout=5s --health-retries=12
+    env:
+      DB_URL: jdbc:postgresql://localhost:5432/reservation
+      DB_USERNAME: reservation_app
+      DB_PASSWORD: ci_database_password
+      ADMIN_USERNAME: browser_admin
+      ADMIN_PASSWORD: Browser-admin-password-123
+      E2E_ADMIN_USERNAME: browser_admin
+      E2E_ADMIN_PASSWORD: Browser-admin-password-123
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Backend verification
+        run: chmod +x mvnw && ./mvnw -B -ntp verify
+      - name: Frontend verification
+        working-directory: frontend
+        run: npm ci && npm test && npm run build
+      - name: Browser runtime
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Start browser backend
+        run: |
+          java -jar target/reservation-0.0.1-SNAPSHOT.jar > target/browser-backend.log 2>&1 &
+          echo $! > target/browser-backend.pid
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:8080/actuator/health/readiness; then exit 0; fi
+            sleep 1
+          done
+          cat target/browser-backend.log
+          exit 1
+      - name: Browser integration
+        working-directory: frontend
+        run: npm run test:e2e
+      - name: Stop backend
+        if: always()
+        run: if test -f target/browser-backend.pid; then kill "$(cat target/browser-backend.pid)" || true; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verification-reports
+          path: |
+            target/surefire-reports
+            target/integration-test-reports
+            target/browser-backend.log
+            frontend/test-results
+  images:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t reservation-backend:ci .
+      - run: docker build -t reservation-frontend:ci frontend

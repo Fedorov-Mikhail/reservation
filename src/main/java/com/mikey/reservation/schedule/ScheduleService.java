@@ -26,7 +26,7 @@ public class ScheduleService {
  }
  @Transactional(readOnly=true) public Definition get(UUID id){current.current();requireResource(id);return definition(id);}
  @Transactional public Definition update(UUID id,Definition body){
-  current.requireManager(id);resources.findLockedById(id).orElseThrow(()->ApiException.notFound("RESOURCE"));
+  current.requireManager(id);resources.findLockedById(id).orElseThrow(()->ApiException.notFound("RESOURCE")).requireBookable();
   validate(body);
   var future=jdbc.query("select starts_at,ends_at from bookings where resource_id=? and status in ('CONFIRMED','HELD') and ends_at>?",
     (rs,n)->new TimeInterval(rs.getTimestamp(1).toInstant(),rs.getTimestamp(2).toInstant()),id,java.sql.Timestamp.from(clock.instant()));

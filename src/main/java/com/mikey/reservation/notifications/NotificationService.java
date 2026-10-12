@@ -7,7 +7,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.*;import java.time.Instant;
 @Service
 public class NotificationService {
- public record Notice(UUID id,UUID bookingId,String status,Instant createdAt,Instant readAt) {}
+ public record Notice(UUID id,UUID bookingId,String status,Instant createdAt,Instant readAt,String resourceName,Instant startsAt,Instant endsAt,String link) {}
  private final JdbcTemplate jdbc;private final CurrentUser current;private final EventDelivery delivery;
  public NotificationService(JdbcTemplate jdbc,CurrentUser current,EventDelivery delivery){this.jdbc=jdbc;this.current=current;this.delivery=delivery;}
  public void deliver(){
@@ -17,7 +17,7 @@ public class NotificationService {
   }
  } @Transactional(readOnly=true)public List<Notice> mine(int page,int size){
   PageResponse.validate(page,size);
-  return jdbc.query("select * from notifications where user_id=? order by created_at desc,id limit ? offset ?",(rs,n)->new Notice(rs.getObject("id",UUID.class),rs.getObject("booking_id",UUID.class),rs.getString("status"),rs.getTimestamp("created_at").toInstant(),rs.getTimestamp("read_at")==null?null:rs.getTimestamp("read_at").toInstant()),current.requiredId(),size,(long)page*size);
+  return jdbc.query("select * from notifications where user_id=? order by created_at desc,id limit ? offset ?",(rs,n)->new Notice(rs.getObject("id",UUID.class),rs.getObject("booking_id",UUID.class),rs.getString("status"),rs.getTimestamp("created_at").toInstant(),rs.getTimestamp("read_at")==null?null:rs.getTimestamp("read_at").toInstant(),rs.getString("resource_name"),rs.getTimestamp("starts_at").toInstant(),rs.getTimestamp("ends_at").toInstant(),"/?booking="+rs.getObject("booking_id",UUID.class)),current.requiredId(),size,(long)page*size);
  }
  @Transactional public void read(UUID id){
   if(jdbc.update("update notifications set read_at=coalesce(read_at,now()) where id=? and user_id=?",id,current.requiredId())==0)throw ApiException.notFound("NOTIFICATION");

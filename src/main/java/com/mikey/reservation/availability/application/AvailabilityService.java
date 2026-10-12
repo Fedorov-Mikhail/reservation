@@ -24,7 +24,8 @@ public class AvailabilityService {
     @Transactional(readOnly = true)
     public AvailabilityResponse find(UUID resourceId, TimeInterval window, int minMinutes) {
         current.current(); policy.validateSearch(window, minMinutes);
-        if (!resources.existsById(resourceId)) throw ApiException.notFound("RESOURCE");
+        var resource = resources.findById(resourceId).orElseThrow(() -> ApiException.notFound("RESOURCE"));
+        if(resource.isArchived()) return new AvailabilityResponse(resourceId,window.start(),window.end(),java.util.List.of());
         var occupied = bookings.occupied(resourceId, window.start(), window.end()).stream()
                 .map(b -> new TimeInterval(b.getStartsAt(), b.getEndsAt())).toList();
         var free = schedules.openIntervals(resourceId, window).stream().flatMap(open -> FreeIntervalCalculator.calculate(open, occupied, Duration.ofMinutes(minMinutes)).stream())

@@ -19,7 +19,13 @@ public class ResourceController {
     }
     @GetMapping("/{id}") public ResourceResponse get(@PathVariable UUID id) { return service.get(id); }
     @GetMapping public PageResponse<ResourceResponse> list(@RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) { return service.list(page, size); }
+            @RequestParam(defaultValue = "20") int size, @RequestParam(defaultValue = "") String q, @RequestParam(defaultValue = "false") boolean archived) { return service.list(page, size, q, archived); }
+    @PostMapping("/{id}/archive") public ResourceResponse archive(@PathVariable UUID id) { return service.archive(id); }
+    @PostMapping("/{id}/restore") public ResourceResponse restore(@PathVariable UUID id) { return service.restore(id); }
+    @DeleteMapping("/{id}") public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        service.delete(id);
+        return ResponseEntity.noContent().build();
+    }
     @PutMapping("/{id}") public ResourceResponse update(@PathVariable UUID id, @Valid @RequestBody ResourceRequest body) {
         return service.update(id, body);
     }

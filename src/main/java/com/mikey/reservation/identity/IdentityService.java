@@ -17,7 +17,7 @@ public class IdentityService {
  public record UserUpdate(@NotNull @Pattern(regexp="USER|ADMIN") String role,@NotNull Boolean enabled) {}
  private final JdbcTemplate jdbc;private final CurrentUser current;private final PasswordEncoder encoder;
  public IdentityService(JdbcTemplate jdbc,CurrentUser current,PasswordEncoder encoder){this.jdbc=jdbc;this.current=current;this.encoder=encoder;}
- public CurrentUser.Account register(Registration body) {
+ @Transactional public CurrentUser.Account register(Registration body) {
    if(body.password().getBytes(StandardCharsets.UTF_8).length>72)throw ApiException.invalid("Password exceeds 72 UTF-8 bytes.");
    UUID id=UUID.randomUUID();String name=body.username().toLowerCase(Locale.ROOT);
    try {jdbc.update("insert into app_users(id,username,password_hash,role) values (?,?,?,'USER')",id,name,encoder.encode(body.password()));}
@@ -41,9 +41,15 @@ public class IdentityService {
      throw new ApiException(HttpStatus.CONFLICT,"LAST_ADMIN","At least one active administrator is required.");
    jdbc.update("update app_users set role=?,enabled=? where id=?",update.role(),update.enabled(),id);
  }
- @Transactional public void manager(UUID resource,UUID user,boolean assign) {
+ @Transactional(readOnly=true) public List<CurrentUser.Account> managers(UUID resource) {
    current.requireAdmin();
    if(jdbc.queryForObject("select count(*) from resources where id=?",Integer.class,resource)==0)throw ApiException.notFound("RESOURCE");
+   return jdbc.query("select u.id,u.username,u.role,u.enabled from app_users u join resource_managers m on m.user_id=u.id where m.resource_id=? order by u.username,u.id",
+     (rs,n)->new CurrentUser.Account(rs.getObject("id",UUID.class),rs.getString("username"),rs.getString("role"),rs.getBoolean("enabled")),resource);
+ }
+ @Transactional public void manager(UUID resource,UUID user,boolean assign) {
+   current.requireAdmin();
+   if(jdbc.queryForList("select id from resources where id=? for update",resource).isEmpty())throw ApiException.notFound("RESOURCE");
    if(jdbc.queryForObject("select count(*) from app_users where id=? and enabled",Integer.class,user)==0)throw ApiException.notFound("USER");
    if(assign)jdbc.update("insert into resource_managers values (?,?) on conflict do nothing",resource,user);
    else jdbc.update("delete from resource_managers where resource_id=? and user_id=?",resource,user);

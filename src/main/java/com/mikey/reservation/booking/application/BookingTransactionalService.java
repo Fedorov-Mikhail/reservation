@@ -40,7 +40,7 @@ public class BookingTransactionalService {
                 return get((UUID)previous.getFirst().get("booking_id"));
             }
         }
-        resources.findLockedById(resourceId).orElseThrow(() -> ApiException.notFound("RESOURCE"));
+        resources.findLockedById(resourceId).orElseThrow(() -> ApiException.notFound("RESOURCE")).requireBookable();
         Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS); expireLocked(resourceId, now); waitlist.promoteLocked(resourceId, now);
         policy.validateCreation(interval, now); schedules.validateBooking(resourceId, interval);
         var booking = new Booking(resourceId, interval, now);

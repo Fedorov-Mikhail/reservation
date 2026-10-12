@@ -13,10 +13,13 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 
 @RestControllerAdvice
 public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
+    private final io.micrometer.core.instrument.MeterRegistry metrics;
+    public ApiExceptionHandler(io.micrometer.core.instrument.MeterRegistry metrics){this.metrics=metrics;}
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
     @ExceptionHandler(ApiException.class)
     ResponseEntity<Object> domain(ApiException error, WebRequest request) {
+        if(error.status()==HttpStatus.CONFLICT) metrics.counter("reservation.conflicts", "code", error.code()).increment();
         return problem(error.status(), error.code(), error.getMessage(), request);
     }
     @Override protected ResponseEntity<Object> handleMethodArgumentNotValid(MethodArgumentNotValidException error,

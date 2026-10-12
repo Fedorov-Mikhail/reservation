@@ -15,3 +15,19 @@ databaseChangeLog:
   - include:
       file: changes/005-queue-events.sql
       relativeToChangelogFile: true
+
+  - include:
+      file: changes/006-resource-lifecycle.sql
+      relativeToChangelogFile: true
+
+  - include:
+      file: changes/007-audit.sql
+      relativeToChangelogFile: true
+
+  - include:
+      file: changes/008-notification-delivery.sql
+      relativeToChangelogFile: true
+
+  - include:
+      file: changes/009-calendar.sql
+      relativeToChangelogFile: true

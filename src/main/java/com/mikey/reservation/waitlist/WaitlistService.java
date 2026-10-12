@@ -18,7 +18,7 @@ public class WaitlistService {
  this.jdbc=jdbc;this.current=current;this.resources=resources;this.bookings=bookings;this.schedules=schedules;this.policy=policy;this.clock=clock;
  }
  @Transactional public Entry join(UUID resourceId,TimeInterval interval){
-  UUID owner=current.requiredId();resources.findLockedById(resourceId).orElseThrow(()->ApiException.notFound("RESOURCE"));
+  UUID owner=current.requiredId();resources.findLockedById(resourceId).orElseThrow(()->ApiException.notFound("RESOURCE")).requireBookable();
   Instant now=clock.instant();policy.validateCreation(interval,now);schedules.validateBooking(resourceId,interval);
   var prior=jdbc.query("select id from waitlist_entries where user_id=? and resource_id=? and starts_at=? and ends_at=? and status in ('WAITING','OFFERED')",(rs,n)->rs.getObject(1,UUID.class),owner,resourceId,java.sql.Timestamp.from(interval.start()),java.sql.Timestamp.from(interval.end()));
   if(!prior.isEmpty())return entry(prior.getFirst());
@@ -46,6 +46,7 @@ public class WaitlistService {
  }
  // Caller holds the resource row lock; every booking mutation uses the same lock order.
  public void promoteLocked(UUID resourceId,Instant now){
+  if(resources.findById(resourceId).map(r->r.isArchived()).orElse(false)) return;
   for(var booking:bookings.findByResourceIdAndStatus(resourceId,BookingStatus.HELD))booking.expire(now);
   bookings.flush();
   jdbc.update("update waitlist_entries w set status=case when b.status='CONFIRMED' then 'FULFILLED' else 'EXPIRED' end from bookings b where w.resource_id=? and w.status='OFFERED' and b.id=w.offered_booking_id and b.status<>'HELD'",resourceId);

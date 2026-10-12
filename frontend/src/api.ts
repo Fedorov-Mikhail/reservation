@@ -1,11 +1,11 @@
-export interface Resource { id: string; name: string; description?: string; location?: string }
-export interface Booking { id: string; resourceId?: string; startsAt: string; endsAt: string; status: 'CONFIRMED' | 'CANCELLED' | 'HELD' | 'EXPIRED'; expiresAt?:string; createdBy?:string }
+export interface Resource { id: string; name: string; description?: string; location?: string; archivedAt?: string | null; archivedBy?: string | null }
+export interface Booking { id: string; resourceId?: string; startsAt: string; endsAt: string; status: 'CONFIRMED' | 'CANCELLED' | 'HELD' | 'EXPIRED'; expiresAt?:string; createdBy?:string; cancellationReason?:string; cancelledBy?:string }
 export interface Page<T> { items: T[]; totalElements: number; page: number; size: number }
 export interface Interval { startsAt: string; endsAt: string }
 export class ApiError extends Error {
   constructor(message: string, public status = 0) { super(message); }
 }
-export async function api<T>(path: string, method = 'GET', body?: unknown, signal?: AbortSignal): Promise<T> {
+export async function api<T>(path: string, method = 'GET', body?: unknown, signal?: AbortSignal, headers?: Record<string,string>): Promise<T> {
   let response: Response;
   try {
     let token: string | undefined;
@@ -15,7 +15,7 @@ export async function api<T>(path: string, method = 'GET', body?: unknown, signa
       token = (await csrf.json()).token;
     }
     response = await fetch('/api/v1' + path, {
-      method, signal, headers: { ...(body ? { 'Content-Type': body instanceof URLSearchParams ? 'application/x-www-form-urlencoded' : 'application/json' } : {}), ...(token ? {'X-CSRF-TOKEN':token}: {}) },
+      method, signal, headers: { ...headers, ...(body ? { 'Content-Type': body instanceof URLSearchParams ? 'application/x-www-form-urlencoded' : 'application/json' } : {}), ...(token ? {'X-CSRF-TOKEN':token}: {}) },
       body: body ? (body instanceof URLSearchParams ? body.toString() : JSON.stringify(body)) : undefined,
     });
   } catch (error) {
@@ -37,7 +37,11 @@ export async function api<T>(path: string, method = 'GET', body?: unknown, signa
       IDEMPOTENCY_CONFLICT: 'Этот ключ запроса уже использован для другой операции.',
       BOOKING_OVERLAP: 'Это время уже занято. Выберите другой интервал.',
       BOOKING_CANNOT_BE_CANCELLED: 'Начавшуюся бронь отменить нельзя.',
+      RESOURCE_ARCHIVED: 'Ресурс находится в архиве. Новые бронирования недоступны.',
+      RESOURCE_HAS_ACTIVE_BOOKINGS: 'Сначала завершите или отмените будущие брони и удержания.',
+      RESOURCE_HAS_ACTIVE_REQUESTS: 'Сначала завершите или отмените активные заявки.',
       RESOURCE_NOT_FOUND: 'Ресурс не найден. Обновите список ресурсов.',
+      RESOURCE_IN_USE: 'Ресурс нельзя удалить: у него есть брони или заявки, включая историю. Они должны быть сохранены.',
       BOOKING_NOT_FOUND: 'Бронь не найдена. Обновите список.',
       TEMPORARILY_UNAVAILABLE: 'Сервер временно недоступен. Попробуйте позднее.',
       VALIDATION_FAILED: 'Проверьте заполненные поля.',
@@ -48,7 +52,9 @@ export async function api<T>(path: string, method = 'GET', body?: unknown, signa
       : 'Не удалось выполнить запрос.');
     throw new ApiError(message + (problem.requestId ? ' Код запроса: ' + problem.requestId : ''), response.status);
   }
-  const result = await response.json();
+  let result;
+  try { result = response.status === 204 ? undefined : await response.json(); }
+  catch { throw new ApiError('Результат запроса неизвестен: ответ сервера не получен. Повторите запрос с теми же параметрами.'); }
   if (method !== 'GET' && !path.startsWith('/auth/')) window.dispatchEvent(new Event('reservation:changed'));
   return result;
 }
@@ -78,3 +84,28 @@ export function displayTime(value: string) {
 
 
 
+
+export function localDateTime(value: string) {
+  const date = new Date(value);
+  return localDate(date) + 'T' + String(date.getHours()).padStart(2,'0') + ':' + String(date.getMinutes()).padStart(2,'0');
+}
+export function calendarWindow(day: string, days: number) {
+  const start = new Date(day + 'T00:00:00'), end = new Date(start);
+  end.setDate(end.getDate() + days);
+  return new URLSearchParams({from:start.toISOString(),to:end.toISOString()}).toString();
+}
+interface Attempt { signature: string; key: string; resourceId:string; mode:string; start:string; end:string }
+const attemptSlot = (accountId:string) => 'reservation:attempt:' + accountId;
+export function loadAttempt(accountId:string): Attempt | undefined {
+  try { const value = JSON.parse(sessionStorage.getItem(attemptSlot(accountId)) ?? 'null');
+    return value && typeof value.signature==='string' && typeof value.key==='string' ? value : undefined;
+  } catch { return undefined; }
+}
+export function clearAttempt(accountId:string, expectedKey?:string) { try { if(!expectedKey || loadAttempt(accountId)?.key===expectedKey)sessionStorage.removeItem(attemptSlot(accountId)); } catch {} }
+export function requestKey(accountId:string, resourceId:string, mode:string, start:string, end:string) {
+  const signature=JSON.stringify([resourceId,mode,start,end]), previous=loadAttempt(accountId);
+  if(previous?.signature===signature) return previous.key;
+  const key=crypto.randomUUID();
+  try {sessionStorage.setItem(attemptSlot(accountId),JSON.stringify({signature,key,resourceId,mode,start,end}));} catch {}
+  return key;
+}

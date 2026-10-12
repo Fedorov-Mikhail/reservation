@@ -17,6 +17,14 @@ public class Resource {
     @Column(nullable = false, updatable = false) private Instant createdAt;
     @Column(nullable = false) private Instant updatedAt;
     @Column(nullable = false, updatable = false) private UUID createdBy = UUID.fromString("00000000-0000-0000-0000-000000000001");
+    private Instant archivedAt;
+    private UUID archivedBy;
+    public boolean isArchived() { return archivedAt != null; }
+    public void archive(Instant now, UUID actor) { archivedAt = now; archivedBy = actor; updatedAt = now; }
+    public void restore(Instant now) { archivedAt = null; archivedBy = null; updatedAt = now; }
+    public void requireBookable() {
+        if (isArchived()) throw new com.mikey.reservation.shared.api.ApiException(org.springframework.http.HttpStatus.CONFLICT, "RESOURCE_ARCHIVED", "Resource is archived.");
+    }
     public void assignOwner(UUID owner) { this.createdBy = owner; }
 
     public Resource(String name, String description, String location, Instant now) {
