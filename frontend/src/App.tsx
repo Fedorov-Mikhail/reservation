@@ -1,3 +1,5 @@
+import ResourceEditor from './ResourceEditor';
+import MyBookings from './MyBookings';
 import ActivityPanel from './ActivityPanel';
 import ScheduleEditor from './ScheduleEditor';
 import type { Account } from './AuthGate';
@@ -58,7 +60,7 @@ function Schedule({resource,day}: {resource:Resource; day:string}) {
   const availability=useData<{intervals:Interval[]}>(`/resources/${resource.id}/availability?${window}&minDurationMinutes=1`,revision);
   const bookings=useData<Page<Booking>>(`/resources/${resource.id}/bookings?${window}&page=${page}&size=20`,revision);
   function refresh() { setRevision(value=>value+1); }
-  useEffect(()=>{const timer=setInterval(()=>{if(!busy)refresh();},15000);return()=>clearInterval(timer);},[busy]);
+  useEffect(()=>{const changed=()=>refresh();const timer=setInterval(()=>{if(!busy)refresh();},15000);globalThis.addEventListener('reservation:changed',changed);return()=>{clearInterval(timer);globalThis.removeEventListener('reservation:changed',changed);};},[busy]);
   async function confirm(id:string){setBusy(true);setError('');setMessage('');try{await api('/bookings/'+id+'/confirm','POST');setMessage('Бронь подтверждена.');}catch(e){setError(errorText(e));}finally{setBusy(false);refresh();}}
   async function create(event:FormEvent) {
     event.preventDefault(); setError(''); setMessage('');
@@ -89,7 +91,7 @@ function Schedule({resource,day}: {resource:Resource; day:string}) {
         <span className="slot" key={interval.startsAt}>{displayTime(interval.startsAt)} — {displayTime(interval.endsAt)}</span>)}
     </div>}
     <section className="booking-form"><h3>Новая бронь</h3><form onSubmit={create}>
-      <label>Действие<select value={mode} onChange={e=>setMode(e.target.value)}><option value="bookings">Забронировать сразу</option><option value="holds">Удержать на 5 минут</option><option value="waitlist">Встать в очередь</option></select></label><div className="time-inputs"><label>Начало брони<input type="datetime-local" required value={start} onChange={e=>setStart(e.target.value)}/></label>
+      <label>Действие<select aria-label="Действие" value={mode} onChange={e=>setMode(e.target.value)}><option value="bookings">Забронировать сразу</option><option value="holds">Удержать на 5 минут</option><option value="waitlist">Встать в очередь</option></select></label><div className="time-inputs"><label>Начало брони<input type="datetime-local" required value={start} onChange={e=>setStart(e.target.value)}/></label>
       <label>Конец брони<input type="datetime-local" required value={end} onChange={e=>setEnd(e.target.value)}/></label></div>
       <p className="muted">От 1 минуты до 24 часов. Бронирование доступно на год вперёд.</p>
       <button className="primary" disabled={busy}>{busy?'Подождите…':mode==='holds'?'Удержать время':mode==='waitlist'?'Встать в очередь':'Забронировать'}</button>
@@ -106,7 +108,7 @@ function Schedule({resource,day}: {resource:Resource; day:string}) {
       {bookings.data.items.length===0?<div className="empty">На этот день пока нет бронирований.</div>:<ul className="bookings">
         {bookings.data.items.map(booking=><li key={booking.id}><div><strong>{displayTime(booking.startsAt)} — {displayTime(booking.endsAt)}</strong>
           <span className={'badge '+(booking.status==='CANCELLED'?'cancelled':'')}>{{CONFIRMED:'Подтверждена',CANCELLED:'Отменена',HELD:'Удержание',EXPIRED:'Истекла'}[booking.status]}</span></div>
-          {booking.status==='HELD' && <div><p className="muted">До {booking.expiresAt?displayTime(booking.expiresAt):'—'}</p><button disabled={busy} onClick={()=>confirm(booking.id)}>Подтвердить бронь</button></div>}
+          {booking.status==='HELD' && <div><p className="muted">До {booking.expiresAt?displayTime(booking.expiresAt):'—'}</p><button disabled={busy || (!!booking.expiresAt && Date.parse(booking.expiresAt)<=Date.now())} onClick={()=>confirm(booking.id)}>Подтвердить бронь</button></div>}
           {(booking.status==='CONFIRMED'||booking.status==='HELD') && <button disabled={busy || +new Date(booking.startsAt)<=Date.now()} onClick={()=>setCancelId(booking.id)}>Отменить бронь</button>}
         </li>)}</ul>}
       <Pager page={page} total={bookings.data.totalElements} change={value=>{setCancelId(undefined);setPage(value);}}/>
@@ -117,27 +119,31 @@ export default function App({user, onLogout}: {user?: Account; onLogout?:()=>Pro
   const [revision,setRevision]=useState(0),[page,setPage]=useState(0),[selected,setSelected]=useState<Resource>();
   const [day,setDay]=useState(()=>{const tomorrow=new Date();tomorrow.setDate(tomorrow.getDate()+1);return localDate(tomorrow);});
   const resources=useData<Page<Resource>>(`/resources?page=${page}&size=20`,revision);
+  const [section,setSection]=useState('resources');
   const zone=Intl.DateTimeFormat().resolvedOptions().timeZone;
   return <><header className="header"><div className="brand"><span className="brand-mark">R</span><div><strong>Reservation</strong><span>Пространство для ваших планов</span></div></div>
     <div className="actions"><span className="local-tag">{user?.username ?? "Локальный сервис"}</span>{onLogout && <button onClick={onLogout}>Выйти</button>}</div></header>
     <main><div className="intro"><p className="eyebrow">БРОНИРОВАНИЕ РЕСУРСОВ</p><h1>Найдите время для важного.</h1><p>Выберите ресурс, проверьте доступность и запланируйте встречу.</p></div>
-    <div className="layout"><aside className="card resources"><div className="section-title"><h2>Ресурсы</h2><span className="count">{resources.data?.totalElements ?? '—'}</span></div>
+    {user&&<nav className="app-nav" aria-label="Разделы приложения">{[['resources','Ресурсы'],['bookings','Мои бронирования'],['activity','Заявки и уведомления'],...(user.role==='ADMIN'?[['users','Пользователи']]:[])].map(([id,label])=><button key={id} aria-current={section===id?'page':undefined} onClick={()=>setSection(id)}>{label}</button>)}</nav>}
+    {section==='bookings'&&<MyBookings/>}{section==='activity'&&<ActivityPanel/>}{section==='users'&&user?.role==='ADMIN'&&<><p className="muted">{selected?'Права управления для ресурса: '+selected.name:'Для назначения управляющего сначала выберите ресурс в разделе «Ресурсы».'}</p><AdminUsers resourceId={selected?.id}/></>}
+    <div hidden={section!=='resources'}><div className="layout"><aside className="card resources"><div className="section-title"><h2>Ресурсы</h2><span className="count">{resources.data?.totalElements ?? '—'}</span></div>
       <button className="refresh" onClick={()=>setRevision(value=>value+1)}>Обновить ресурсы</button>
       <ErrorNotice text={resources.error}/>{resources.loading?<p role="status">Загрузка ресурсов…</p>:resources.data && <>
-      {resources.data.items.length===0?<p className="empty">Добавьте первый ресурс, чтобы начать.</p>:<ul className="resource-list">{resources.data.items.map(resource=>
+      {resources.data.items.length===0?<p className="empty">Ресурсов пока нет. Администратор может добавить их.</p>:<ul className="resource-list">{resources.data.items.map(resource=>
         <li key={resource.id}><button aria-pressed={selected?.id===resource.id} className={selected?.id===resource.id?'selected':''} onClick={()=>setSelected(resource)}>
           <strong>{resource.name}</strong><span>{resource.location || 'Расположение не указано'}</span></button></li>)}</ul>}
       <Pager page={page} total={resources.data.totalElements} change={setPage}/></>}
       {(!user || user.role === "ADMIN") && <ResourceForm refresh={()=>setRevision(value=>value+1)} created={resource=>{setSelected(resource);setPage(0);setRevision(value=>value+1);}}/>}
     </aside><section className="card detail">
-      {!selected?<div className="welcome"><span className="welcome-icon">◷</span><h2>Начните с выбора ресурса</h2><p>Его расписание и бронирования появятся здесь.<br/>Можно также создать новый ресурс слева.</p></div>:<>
+      {!selected?<div className="welcome"><span className="welcome-icon">◷</span><h2>Начните с выбора ресурса</h2><p>Его расписание и бронирования появятся здесь.<br/>Выберите удобную дату для просмотра.</p></div>:<>
         <div className="detail-heading"><div><p className="eyebrow">РАСПИСАНИЕ РЕСУРСА</p><h2>{selected.name}</h2><p className="muted">{selected.location}</p></div>
           <label>Дата расписания<input type="date" required value={day} min="0001-01-01" max="9998-12-31" onChange={e=>{if (/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(e.target.value) && e.target.value>='0001-01-01' && e.target.value<='9998-12-31') setDay(e.target.value);}}/></label></div>
         {selected.description && <p className="description">{selected.description}</p>}
         <p className="timezone">Время показано в часовом поясе {zone}.</p>
+        <ResourceEditor key={selected.id} resource={selected} onSaved={value=>{setSelected(value);setRevision(n=>n+1);}}/>
         <Schedule key={selected.id+day} resource={selected} day={day}/>
       </>}
-    </section></div>{user && <ActivityPanel/>}{user?.role === "ADMIN" && <AdminUsers resourceId={selected?.id}/>}<footer>Reservation · Ваше расписание в одном месте</footer></main></>;
+    </section></div></div><footer>Reservation · Ваше расписание в одном месте</footer></main></>;
 }
 
 

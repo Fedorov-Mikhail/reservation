@@ -17,8 +17,8 @@ public class AdminBootstrap implements ApplicationRunner {
  }
  public void run(ApplicationArguments args) {
    if(username.isBlank()&&password.isBlank())return;
-   if(!username.matches("[a-z0-9_-]{3,64}")||password.length()<12||password.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>72)
-     throw new IllegalStateException("Bootstrap admin requires a lowercase username and a password of 12+ characters, at most 72 UTF-8 bytes.");
+   if(!username.matches("[a-z0-9_-]{3,64}")||password.length()<8||password.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>72)
+     throw new IllegalStateException("Bootstrap admin requires a lowercase username and a password of 8+ characters, at most 72 UTF-8 bytes.");
    transactions.executeWithoutResult(status->{
      jdbc.execute("select pg_advisory_xact_lock(810501)");
      var existing=jdbc.queryForList("select role from app_users where username=?",username);

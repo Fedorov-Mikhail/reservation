@@ -13,7 +13,7 @@ import org.springframework.http.HttpStatus;
 @Service
 public class IdentityService {
  public record Registration(@NotBlank @Pattern(regexp="[a-zA-Z0-9_-]{3,64}") String username,
-                            @NotBlank @Size(min=12,max=64) String password) {}
+                            @NotBlank @Size(min=8,max=64) String password) {}
  public record UserUpdate(@NotNull @Pattern(regexp="USER|ADMIN") String role,@NotNull Boolean enabled) {}
  private final JdbcTemplate jdbc;private final CurrentUser current;private final PasswordEncoder encoder;
  public IdentityService(JdbcTemplate jdbc,CurrentUser current,PasswordEncoder encoder){this.jdbc=jdbc;this.current=current;this.encoder=encoder;}

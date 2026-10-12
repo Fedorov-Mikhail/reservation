@@ -1,68 +1,68 @@
 import { test, expect } from '@playwright/test';
-test('real API: create resource, book, reject duplicate, cancel, mobile layout', async ({ page, request }) => {
-  const errors: string[]=[];
-  page.on('pageerror',error=>errors.push(error.message));
-  await page.goto('/');
-  await page.getByText('＋ Новый ресурс', {exact:true}).click();
-  const name='Browser test '+Date.now();
-  await page.getByLabel('Название',{exact:true}).fill(name);
-  await page.getByLabel('Расположение',{exact:true}).fill('Демонстрационная комната');
-  await page.getByLabel('Описание',{exact:true}).fill('Создано браузерной проверкой. Бронь отменяется после теста.');
-  await page.getByRole('button',{name:'Создать ресурс',exact:true}).click();
-  await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
-  let createdId: string | undefined;
-  try {
-    const createdPromise=page.waitForResponse(r=>r.request().method()==='POST' && r.url().endsWith('/bookings'));
-    await page.getByRole('button',{name:'Забронировать',exact:true}).click();
-    const created=await createdPromise;
-    expect(created.status()).toBe(201);
-    createdId=(await created.json()).id;
-    await expect(page.getByText('Бронь создана.',{exact:true})).toBeVisible();
-    await expect(page.getByText('Подтверждена',{exact:true})).toBeVisible();
-    await expect(page.locator('.slot')).toHaveCount(2);
-    const duplicate=page.waitForResponse(r=>r.request().method()==='POST' && r.url().endsWith('/bookings'));
-    await page.getByRole('button',{name:'Забронировать',exact:true}).click();
-    expect((await duplicate).status()).toBe(409);
-    await expect(page.getByRole('alert')).toContainText('Это время уже занято');
-    await page.getByRole('button',{name:'Отменить бронь',exact:true}).click();
-    await page.getByRole('button',{name:'Да, отменить',exact:true}).click();
-    await expect(page.getByText('Бронь отменена.',{exact:true})).toBeVisible();
-    await expect(page.getByText('Отменена',{exact:true})).toBeVisible();
-    await expect(page.locator('.slot')).toHaveCount(1);
-    await page.screenshot({path:'test-results/desktop.png',fullPage:true});
-    await page.setViewportSize({width:390,height:844});
-    await expect(page.getByRole('button',{name:'Забронировать',exact:true})).toBeVisible();
-    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-    await page.screenshot({path:'test-results/mobile.png',fullPage:true});
-    expect(errors).toEqual([]);
-  } finally {
-    if(createdId) await request.post('/api/v1/bookings/'+createdId+'/cancel');
-  }
+test('real API: login, resource edit, hold, conflict, waitlist, confirmation and cancellation', async ({ page }) => {
+ test.skip(!process.env.E2E_ADMIN_USERNAME || !process.env.E2E_ADMIN_PASSWORD,'Set E2E_ADMIN_USERNAME and E2E_ADMIN_PASSWORD for a test database.');
+ const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('/');
+ await page.getByLabel('Логин',{exact:true}).fill(process.env.E2E_ADMIN_USERNAME!);
+ await page.getByLabel('Пароль',{exact:true}).fill(process.env.E2E_ADMIN_PASSWORD!);
+ await page.getByRole('button',{name:'Войти',exact:true}).click();
+ await page.getByText('＋ Новый ресурс',{exact:true}).click();
+ const name='Browser test '+Date.now();
+ await page.getByLabel('Название',{exact:true}).fill(name);
+ await page.getByRole('button',{name:'Создать ресурс',exact:true}).click();
+ await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
+ await page.getByText('Редактировать ресурс',{exact:true}).click();
+ await page.getByLabel('Расположение ресурса').fill('Этаж 3');
+ await page.getByRole('button',{name:'Сохранить ресурс',exact:true}).click();
+ await expect(page.getByText('Ресурс сохранён.',{exact:true})).toBeVisible();
+ await page.getByLabel('Действие',{exact:true}).selectOption('holds');
+ await page.getByRole('button',{name:'Удержать время',exact:true}).click();
+ await expect(page.getByText('Время удержано. Подтвердите бронь до истечения срока.',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Мои бронирования',exact:true}).click();
+ await expect(page.locator('.personal-bookings')).toContainText(name);
+ await page.getByRole('button',{name:'Подтвердить бронь',exact:true}).click();
+ await expect(page.getByText('Бронь подтверждена.',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Ресурсы',exact:true}).click();
+ await page.getByLabel('Действие',{exact:true}).selectOption('bookings');
+ await page.getByRole('button',{name:'Забронировать',exact:true}).click();
+ await expect(page.getByRole('alert')).toContainText('Это время уже занято');
+ await page.getByLabel('Действие',{exact:true}).selectOption('waitlist');
+ await page.getByRole('button',{name:'Встать в очередь',exact:true}).click();
+ await expect(page.getByText('Заявка добавлена в очередь.',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Отменить бронь',exact:true}).click();
+ await page.getByRole('button',{name:'Да, отменить',exact:true}).click();
+ await expect(page.getByText('Бронь отменена.',{exact:true}).filter({visible:true})).toBeVisible();
+ await page.getByRole('button',{name:'Заявки и уведомления',exact:true}).click();
+ await expect(page.getByText('Предложено время',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Принять предложение',exact:true}).click();
+ await expect(page.getByText('Подтверждено',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Обновить',exact:true}).click();
+ await expect(page.locator('.activity')).toContainText('Бронь подтверждена',{timeout:20000});
+ await page.getByRole('button',{name:'Мои бронирования',exact:true}).click();
+ await expect(page.locator('.personal-bookings .bookings li')).toHaveCount(2);
+ await page.screenshot({path:'test-results/desktop.png',fullPage:true,animations:'disabled'});
+ await page.setViewportSize({width:390,height:844});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.screenshot({path:'test-results/mobile.png',fullPage:true});
+ await page.getByRole('button',{name:'Отменить бронь',exact:true}).click();
+ await page.getByRole('button',{name:'Да, отменить',exact:true}).click();
+ await expect(page.locator('.personal-bookings').getByText('Бронь отменена.',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Выйти',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Войти',exact:true})).toBeVisible();
+ expect(errors).toEqual([]);
 });
-
-
-test('rejects a nonexistent local time during daylight-saving transition', async ({browser}) => {
-  const context=await browser.newContext({timezoneId:'America/New_York'});
-  const page=await context.newPage();
-  let posts=0;
-  await page.route('**/api/v1/**',async route=>{
-    const url=route.request().url();
-    if(route.request().method()==='POST') posts++;
-    const json=url.includes('/availability')?{intervals:[]}:url.includes('/bookings')?{items:[],totalElements:0}:{items:[{id:'dst-room',name:'DST room'}],totalElements:1};
-    await route.fulfill({json});
-  });
-  try {
-    await page.goto('http://127.0.0.1:5173');
-    await page.getByRole('button',{name:/DST room/}).click();
-    const now=new Date();
-    let year=now.getUTCFullYear();
-    function transition(y:number) {const first=new Date(Date.UTC(y,2,1));return 8+(7-first.getUTCDay())%7;}
-    if(new Date(Date.UTC(year,2,transition(year)))<=now) year++;
-    const day=year+'-03-'+String(transition(year)).padStart(2,'0');
-    await page.getByLabel('Начало брони').fill(day+'T02:30');
-    await page.getByLabel('Конец брони').fill(day+'T04:00');
-    await page.getByRole('button',{name:'Забронировать',exact:true}).click();
-    await expect(page.getByRole('alert')).toContainText('не существует');
-    expect(posts).toBe(0);
-  } finally {await context.close();}
+test('registration gives ordinary user access without admin controls',async({page})=>{
+ test.skip(!process.env.E2E_ADMIN_USERNAME,'Requires test backend');
+ await page.goto('/');await page.getByRole('button',{name:'Создать аккаунт',exact:true}).click();
+ await page.getByLabel('Логин',{exact:true}).fill('browser_'+Date.now());await page.getByLabel('Пароль',{exact:true}).fill('Browser-test-password-123');
+ await page.getByRole('button',{name:'Зарегистрироваться',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Мои бронирования',exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Пользователи',exact:true})).toHaveCount(0);
+ await expect(page.getByText('＋ Новый ресурс',{exact:true})).toHaveCount(0);
+});
+test('rejects nonexistent local time during DST transition',async({browser})=>{
+ const context=await browser.newContext({timezoneId:'America/New_York'});const page=await context.newPage();let posts=0;
+ await page.route('**/api/v1/**',async route=>{const url=route.request().url();if(route.request().method()==='POST')posts++;
+ const json=url.endsWith('/auth/me')?{id:'u',username:'test',role:'USER',enabled:true}:url.endsWith('/permissions')?{canManage:false}:url.endsWith('/schedule')?{zoneId:'UTC',weekly:{},exceptions:{}}:url.includes('/availability')?{intervals:[]}:url.includes('/bookings')?{items:[],totalElements:0}:{items:[{id:'dst-room',name:'DST room'}],totalElements:1};await route.fulfill({json});});
+ try{await page.goto('http://127.0.0.1:5173');await page.getByRole('button',{name:/DST room/}).click();let year=new Date().getUTCFullYear();const transition=(y:number)=>8+(7-new Date(Date.UTC(y,2,1)).getUTCDay())%7;if(new Date(Date.UTC(year,2,transition(year)))<=new Date())year++;const day=year+'-03-'+String(transition(year)).padStart(2,'0');await page.getByLabel('Начало брони').fill(day+'T02:30');await page.getByLabel('Конец брони').fill(day+'T04:00');await page.getByRole('button',{name:'Забронировать',exact:true}).click();await expect(page.getByRole('alert')).toContainText('не существует');expect(posts).toBe(0);}finally{await context.close();}
 });

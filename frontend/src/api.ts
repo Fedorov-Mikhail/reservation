@@ -1,5 +1,5 @@
 export interface Resource { id: string; name: string; description?: string; location?: string }
-export interface Booking { id: string; startsAt: string; endsAt: string; status: 'CONFIRMED' | 'CANCELLED' | 'HELD' | 'EXPIRED'; expiresAt?:string; createdBy?:string }
+export interface Booking { id: string; resourceId?: string; startsAt: string; endsAt: string; status: 'CONFIRMED' | 'CANCELLED' | 'HELD' | 'EXPIRED'; expiresAt?:string; createdBy?:string }
 export interface Page<T> { items: T[]; totalElements: number; page: number; size: number }
 export interface Interval { startsAt: string; endsAt: string }
 export class ApiError extends Error {
@@ -23,6 +23,7 @@ export async function api<T>(path: string, method = 'GET', body?: unknown, signa
     throw new ApiError(method === 'GET' ? 'Не удалось связаться с сервером. Проверьте, запущен ли Java backend.' : 'Результат запроса неизвестен: ответ сервера не получен. Перед повтором проверьте обновлённый список — операция могла выполниться.');
   }
   if (!response.ok) {
+    if (response.status === 401 && !path.startsWith('/auth/')) window.dispatchEvent(new Event('reservation:unauthorized'));
     const problem = await response.json().catch(() => ({}));
     const messages: Record<string, string> = {
       UNAUTHENTICATED: 'Войдите в аккаунт. Если сессия истекла, обновите страницу.',
@@ -47,7 +48,9 @@ export async function api<T>(path: string, method = 'GET', body?: unknown, signa
       : 'Не удалось выполнить запрос.');
     throw new ApiError(message + (problem.requestId ? ' Код запроса: ' + problem.requestId : ''), response.status);
   }
-  return response.json();
+  const result = await response.json();
+  if (method !== 'GET' && !path.startsWith('/auth/')) window.dispatchEvent(new Event('reservation:changed'));
+  return result;
 }
 export const errorText = (error: unknown) => error instanceof Error ? error.message : 'Неизвестная ошибка.';
 export function localDate(date = new Date()) {

@@ -38,6 +38,13 @@ class IdentityIT extends PostgresSupport {
    assertThat(alice.call("POST","/api/v1/auth/logout",null).statusCode()).isEqualTo(200);
    assertThat(alice.call("GET","/api/v1/auth/me",null).statusCode()).isEqualTo(401);
  }
+ @Test void passwordMinimumIsEightCharacters() throws Exception {
+   var client=new SessionClient(port);
+   String username="p"+UUID.randomUUID().toString().replace("-","");
+   assertThat(client.call("POST","/api/v1/auth/register","{\"username\":\""+username+"\",\"password\":\"Pass123\"}").statusCode()).isEqualTo(400);
+   assertThat(client.call("POST","/api/v1/auth/register","{\"username\":\""+username+"\",\"password\":\"Pass1234\"}").statusCode()).isEqualTo(201);
+   assertThat(client.login(username,"Pass1234").statusCode()).isEqualTo(200);
+ }
  @Test void csrfRequiredForRegistration() throws Exception {
    var response=HttpClient.newHttpClient().send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/v1/auth/register"))
     .header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString("{\"username\":\"attack\",\"password\":\"Password-12345\"}")).build(),HttpResponse.BodyHandlers.ofString());

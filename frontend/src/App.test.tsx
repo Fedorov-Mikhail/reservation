@@ -14,6 +14,9 @@ beforeEach(() => {
     const method = init?.method ?? 'GET';
     const body = init?.body ? JSON.parse(String(init.body)) : null;
     calls.push({url, method, body});
+    if (url.endsWith('/permissions')) return Response.json({canManage:false});
+    if (url.endsWith('/schedule')) return Response.json({zoneId:'UTC',weekly:{},exceptions:{}});
+    if (url.endsWith('/csrf')) return Response.json({token:'test'});
     if (url.includes('/cancel')) { bookings[0].status = 'CANCELLED'; return Response.json(bookings[0]); }
     if (url.includes('/availability')) return Response.json({intervals: [{startsAt: '2030-01-01T09:00:00Z', endsAt: '2030-01-01T12:00:00Z'}]});
     if (url.includes('/bookings') && method === 'POST') {
